@@ -1,0 +1,20 @@
+{
+  "config": {
+    "error": {
+      "wrong_stop_number": "Haltestelle Nummer ist nicht korrekt.",
+      "wrong_line_name": "Nicht korrekte Linie Nummer"
+    },
+    "step": {
+      "user": {
+        "data": {
+          "vgn_stop_number": "Haltestelle VGN Kennung Nummer",
+          "vgn_product": "VAG Produkt",
+          "vgn_direction": "Fahrrichtung text",
+          "vgn_line_name": "VAG Linie Nummer"
+        },
+        "description": "Geben Sie Haltestelle Konfiguration ein",
+        "title": "Neue Haltestelle"
+      }
+    }
+  }
+}

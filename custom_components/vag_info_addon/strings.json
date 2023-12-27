@@ -1,0 +1,20 @@
+{
+  "config": {
+    "error": {
+      "vgn_stop_number": "The auth token provided is not valid.",
+      "vgn_line_name": "The path provided is not valid. Should be in the format `user/repo-name`."
+    },
+    "step": {
+      "user": {
+        "data": {
+          "vgn_stop_number": "Bus stop number",
+          "vgn_product": "VAG Product",
+          "vgn_direction": "Drive direction name",
+          "vgn_line_name": "VAG line number"
+        },
+        "description": "Enter bus stop configuration",
+        "title": "New VAG bus stop"
+      }
+    }
+  }
+}
