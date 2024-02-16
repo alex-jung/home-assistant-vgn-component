@@ -1,30 +1,27 @@
 """Bus notification integration."""
-import logging
+from homeassistant import core
+from homeassistant.config_entries import ConfigEntry
+from homeassistant.const import Platform
+from homeassistant.core import HomeAssistant
 
-from homeassistant import config_entries, core
-
-from .api.vag_rest_api import VagRestApi
 from .const import DOMAIN
+from .vag_coordinator import VagCoordinator
 
-_LOGGER = logging.getLogger(__name__)
+PLATFORMS = [Platform.SENSOR]
 
 
-async def async_setup_entry(
-    hass: core.HomeAssistant, entry: config_entries.ConfigEntry
-) -> bool:
-    _LOGGER.info(f"Setup component for entry: {entry.entry_id}")  # noqa: G004
+async def async_setup_entry(hass: core.HomeAssistant, entry: ConfigEntry) -> bool:
+    coordinator = VagCoordinator(hass, entry)
 
-    api = VagRestApi()
+    await coordinator.async_config_entry_first_refresh()
 
-    hass.data.setdefault(DOMAIN, {})
+    hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
-    hass.data[DOMAIN][entry.entry_id] = {
-        "data": entry.data,
-        "api": api,
-    }
-
-    hass.async_create_task(
-        hass.config_entries.async_forward_entry_setup(entry, "sensor")
-    )
+    await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
 
     return True
+
+
+async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
+    """Unload a config entry."""
+    return await hass.config_entries.async_unload_platforms(entry, PLATFORMS)

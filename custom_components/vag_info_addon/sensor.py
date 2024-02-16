@@ -1,5 +1,5 @@
 """Github custom component."""
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 import logging
 
 from homeassistant import config_entries, core
@@ -7,13 +7,7 @@ from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import (
-    CONFIG_DIRECTION,
-    CONFIG_LINE_NAME,
-    CONFIG_PRODUCT_NAME,
-    CONFIG_STOP_VGN_NUMBER,
-    DOMAIN,
-)
+from .const import CONFIG_DIRECTION, DOMAIN
 from .data.abfahrt import Abfahrt
 from .vag_coordinator import VagCoordinator
 
@@ -24,51 +18,17 @@ async def async_setup_entry(
     hass: core.HomeAssistant, entry: config_entries.ConfigEntry, async_add_entities
 ):
     """Set up config entry."""
-    _LOGGER.info(f"Start configuration sensor for entry ID:{entry.entry_id}")
-
-    _LOGGER.debug("Old data:")
-    _LOGGER.debug(hass.data[DOMAIN][entry.entry_id])
-
-    api = hass.data[DOMAIN][entry.entry_id]["api"]
-    data = hass.data[DOMAIN][entry.entry_id]["data"]
-
-    if api:
-        _LOGGER.debug("API is not None")
-
-    if data:
-        _LOGGER.debug(f"data is not None: {data}")
-
-    coordinator = hass.data.setdefault(DOMAIN, {})[entry.entry_id] = VagCoordinator(
-        hass,
-        api,
-        vgn_number=data[CONFIG_STOP_VGN_NUMBER],
-        line=data[CONFIG_LINE_NAME],
-        product=data[CONFIG_PRODUCT_NAME],
-    )
-
-    if not api:
-        _LOGGER.error("No api object found")
-
-    # await coordinator.async_config_entry_first_refresh()
+    coordinator = hass.data[DOMAIN][entry.entry_id]
 
     async_add_entities(
         [
             VagNextStopEntity(
-                hass=hass, coordinator=coordinator, direction=data[CONFIG_DIRECTION]
+                hass=hass,
+                coordinator=coordinator,
+                direction=entry.data[DOMAIN][CONFIG_DIRECTION],
             )
         ],
-        # update_before_add=True,
     )
-
-
-async def async_unload_entry(hass, entry):
-    """Unload a config entry."""
-    _LOGGER.info(f"Unloading entry {entry}")
-
-
-async def async_remove_entry(hass, entry) -> None:
-    """Handle removal of an entry."""
-    _LOGGER.info(f"Removing entry {entry}")
 
 
 class VagNextStopEntity(CoordinatorEntity, SensorEntity):
@@ -80,14 +40,16 @@ class VagNextStopEntity(CoordinatorEntity, SensorEntity):
         super().__init__(coordinator)
         self._hass = hass
         self._coordinator = coordinator
-        self._product = coordinator.vgn_product
-        self._line = coordinator.line_name
         self._direction = direction
 
-        self._attr_name = f"vag_{self._product}_{self._line}_{self._direction}"
-        self._attr_unique_id = f"vag_{self._product}_{self._line}_{self._direction}"
+        product = coordinator.vgn_product
+        line = coordinator.line_name
+        vgn_number = self._coordinator.vgn_number
+
+        self._attr_name = f"vag_{vgn_number}_{product}_{line}_{self._direction}"
+        self._attr_unique_id = f"vag_{vgn_number}_{product}_{line}_{self._direction}"
         self._attr_should_poll = False
-        self._value = "Loading"
+        self._value = "Laden..."
 
         _LOGGER.info("VAG Sensor entity created")
 
@@ -99,13 +61,10 @@ class VagNextStopEntity(CoordinatorEntity, SensorEntity):
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
-        # _LOGGER.info(f"Filter direction: {self._direction}")
 
         abfahrten = list(
             filter(lambda x: x.direction == self._direction, self._coordinator.data)
         )
-
-        # _LOGGER.debug(data)
 
         if not abfahrten:
             self._value = "-"
@@ -131,7 +90,7 @@ class VagNextStopEntity(CoordinatorEntity, SensorEntity):
         ist_time = datetime.fromisoformat(next_abfahrt.departure_is)
 
         delay = ist_time - soll_time
-        delta = ist_time - datetime.now(timezone.utc)
+        delta = ist_time - datetime.now(UTC)
 
         (delta_days, delta_hours, delta_minutes) = self._days_hours_minutes(delta)
 

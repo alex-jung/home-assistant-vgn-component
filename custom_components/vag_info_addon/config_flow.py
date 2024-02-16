@@ -5,8 +5,6 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.core import callback
-from homeassistant.data_entry_flow import FlowResult
 from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import selector
@@ -47,12 +45,6 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         super().__init__()
 
         self._api = VagRestApi()
-
-    @staticmethod
-    @callback
-    def async_get_options_flow(config_entry):
-        """Get the options flow for this handler."""
-        return OptionsFlowHandler(config_entry)
 
     async def async_step_user(self, user_input=None):
         errors = {}
@@ -154,7 +146,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if not errors:
                 return self.async_create_entry(
                     title=entry_title,
-                    data=self.entry_data,
+                    data={DOMAIN: self.entry_data},
                 )
 
         return self.async_show_form(
@@ -179,55 +171,3 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             if hs.name == name:
                 return hs
         raise ValueError
-
-
-class OptionsFlowHandler(config_entries.OptionsFlow):
-    """Handles options flow for the component."""
-
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        self.config_entry = config_entry
-
-        _LOGGER.debug(f"OptionsFlowHandler created - {self.config_entry.options}")
-
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> FlowResult:
-        """Manage the options."""
-        if user_input is not None:
-            return self.async_create_entry(title="", data=user_input)
-
-        _LOGGER.debug(f"step_init. {user_input=}")
-        _LOGGER.debug(f"step_init. {self.config_entry.data=}")
-
-        entry_data = self.config_entry.data
-
-        return self.async_show_form(
-            step_id="init",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(
-                        CONFIG_STOP_VGN_NUMBER,
-                        default=entry_data[CONFIG_STOP_VGN_NUMBER],
-                    ): cv.string,
-                    vol.Required(
-                        CONFIG_PRODUCT_NAME,
-                        default=entry_data[CONFIG_PRODUCT_NAME],
-                    ): selector(
-                        {
-                            "select": {
-                                "options": ["Bus", "UBahn", "Tram"],
-                                "mode": "dropdown",
-                            }
-                        }
-                    ),
-                    vol.Required(
-                        CONFIG_DIRECTION,
-                        default=entry_data[CONFIG_DIRECTION],
-                    ): cv.string,
-                    vol.Required(
-                        CONFIG_LINE_NAME,
-                        default=entry_data[CONFIG_LINE_NAME],
-                    ): cv.string,
-                }
-            ),
-        )

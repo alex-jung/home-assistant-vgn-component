@@ -31,7 +31,7 @@ from ..data.haltestelle import Haltestelle
 
 _LOGGER = logging.getLogger(__name__)
 
-REQUEST_TIMEOUT = 20  # seconds
+REQUEST_TIMEOUT = 10  # seconds
 
 REST_API_URL_HALTESTELLEN = "https://start.vag.de/dm/api/haltestellen.json/vag"
 REST_API_URL_ABFAHRTEN = "https://start.vag.de/dm/api/abfahrten.json/vgn"
