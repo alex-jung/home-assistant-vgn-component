@@ -1,9 +1,0 @@
-{
-    "domain":"vag_info_addon",
-    "name": "VAG - Abfahrten Information",
-    "version": "0.0.1",
-    "integration_type": "hub",
-    "iot_class": "local_polling",
-    "config_flow": true,
-    "requirements": ["requests==2.31.0"]
-}

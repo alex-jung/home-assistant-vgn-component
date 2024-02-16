@@ -1,6 +1,6 @@
 from typing import Final
 
-DOMAIN = "vag_info_addon"
+DOMAIN = "vgn_departure_info"
 
 # Constants for "Haltestellen"
 REST_API_VAG_NUMBER_TAG: Final = "VAGKennung"

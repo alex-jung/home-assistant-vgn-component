@@ -9,7 +9,7 @@
         "data": {
           "stop_name": "Name"
         },
-        "description": "Geben Sie Haltestellenname ein. z.B. Frankenstr",
+        "description": "Geben Sie Haltestellenname ein z.B. Frankenstr",
         "title": "Haltestelle"
       },
       "product": {

@@ -1,0 +1,12 @@
+{
+    "domain":"vgn_departure_info",
+    "name": "VGN Abfahrt Information",
+    "version": "0.0.1",
+    "codeowners": ["@alex-jung"],
+    "documentation": "https://github.com/alex-jung/home-assistant-vgn-component",
+    "issue_tracker": "https://github.com/alex-jung/home-assistant-vgn-component/issues",
+    "integration_type": "hub",
+    "iot_class": "local_polling",
+    "config_flow": true,
+    "requirements": ["requests==2.31.0"]
+}
