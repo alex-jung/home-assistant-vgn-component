@@ -1,5 +1,4 @@
 {
     "name": "VGN Abfahrt Information",
-    "country": "DE",
-    "domains": ["sensor"]
+    "country": "DE"
   }
