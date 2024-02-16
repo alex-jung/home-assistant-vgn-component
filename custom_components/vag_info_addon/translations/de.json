@@ -7,13 +7,24 @@
     "step": {
       "user": {
         "data": {
-          "vgn_stop_number": "Haltestelle VGN Kennung Nummer",
-          "vgn_product": "VAG Produkt",
-          "vgn_direction": "Fahrrichtung text",
-          "vgn_line_name": "VAG Linie Nummer"
+          "stop_name": "Name"
         },
-        "description": "Geben Sie Haltestelle Konfiguration ein",
-        "title": "Neue Haltestelle"
+        "description": "Geben Sie Haltestellenname ein. z.B. Frankenstr",
+        "title": "Haltestelle"
+      },
+      "product": {
+        "data": {
+          "stop_name": "Haltestellenname",
+          "product_name": "VAG Produkt",
+          "line_name": "VAG Linie Nummer. e.g. 67"
+        },
+        "title": "Product und Linie"
+      },
+      "direction": {
+        "data": {
+          "direction_text": "Richtungstext"
+        },
+        "title": "Haltepunkt und Richtung"
       }
     }
   }
