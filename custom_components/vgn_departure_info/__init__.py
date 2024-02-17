@@ -5,13 +5,13 @@ from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .vag_coordinator import VagCoordinator
+from .vgn_coordinator import VgnCoordinator
 
 PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator = VagCoordinator(hass, entry)
+    coordinator = VgnCoordinator(hass, entry)
 
     await coordinator.async_config_entry_first_refresh()
 

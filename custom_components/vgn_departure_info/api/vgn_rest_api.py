@@ -1,4 +1,5 @@
 """Service for VAG Rest API."""
+from datetime import datetime
 import json
 import logging
 
@@ -31,13 +32,13 @@ from ..data.haltestelle import Haltestelle
 
 _LOGGER = logging.getLogger(__name__)
 
-REQUEST_TIMEOUT = 10  # seconds
+REQUEST_TIMEOUT = 20  # seconds
 
 REST_API_URL_HALTESTELLEN = "https://start.vag.de/dm/api/haltestellen.json/vag"
 REST_API_URL_ABFAHRTEN = "https://start.vag.de/dm/api/abfahrten.json/vgn"
 
 
-class VagRestApi:
+class VgnRestApi:
     """Rest API service."""
 
     def get_haltestellen(self, stop_name: str) -> list[Haltestelle]:
@@ -74,7 +75,7 @@ class VagRestApi:
 
     def get_abfahrten(
         self, vgn_number: str, line: str | None = None, product: str | None = None
-    ):
+    ) -> list[Abfahrt]:
         """Return Abfahrten found for defined bus stop with number `vgn_number`.
 
         Optionaly results can be reduced by providing additional arguments `line` and `product`
@@ -129,8 +130,8 @@ class VagRestApi:
                 stop_point=ab_stop_point,
                 direction=ab_direction,
                 direction_text=ab_direction_text,
-                departure_must=ab_departure_must,
-                departure_is=ab_departure_is,
+                departure_must=datetime.fromisoformat(ab_departure_must),
+                departure_is=datetime.fromisoformat(ab_departure_is),
                 product=ab_product,
                 trip_number=ab_trip_number,
                 operation_day=ab_operation_day,

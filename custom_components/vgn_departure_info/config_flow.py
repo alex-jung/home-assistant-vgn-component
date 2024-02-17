@@ -4,16 +4,17 @@ from typing import Any
 import voluptuous as vol
 
 from homeassistant import config_entries
-from homeassistant.exceptions import PlatformNotReady
 from homeassistant.helpers import config_validation as cv
 from homeassistant.helpers.selector import selector
+from homeassistant.util import slugify
 
-from .api.vag_rest_api import VagRestApi
+from .api.vgn_rest_api import VgnRestApi
 from .const import (
     CONFIG_DIRECTION,
     CONFIG_DIRECTION_TEXT,
     CONFIG_LINE_NAME,
     CONFIG_PRODUCT_NAME,
+    CONFIG_STOP_LIST,
     CONFIG_STOP_NAME,
     CONFIG_STOP_VGN_NUMBER,
     DOMAIN,
@@ -22,43 +23,38 @@ from .data.haltestelle import Haltestelle
 
 _LOGGER = logging.getLogger(__name__)
 
-VGN_PRODUCTS = ["Bus", "UBahn", "Train"]
-
 
 class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
     VERSION = 1
     MINOR_VERSION = 1
 
-    haltestellen: list[Haltestelle] = []
-
-    entry_data: dict[str, Any] = {
-        CONFIG_STOP_NAME: None,
-        CONFIG_STOP_VGN_NUMBER: None,
-        CONFIG_LINE_NAME: None,
-        CONFIG_PRODUCT_NAME: None,
-        CONFIG_DIRECTION: None,
-        CONFIG_DIRECTION_TEXT: None,
-    }
-
     def __init__(self) -> None:
         super().__init__()
 
-        self._api = VagRestApi()
+        self._api = VgnRestApi()
+        self._entry_data: dict[str, Any] = {
+            CONFIG_STOP_NAME: None,
+            CONFIG_STOP_VGN_NUMBER: None,
+            CONFIG_STOP_LIST: [],
+        }
+        self._haltestellen: list[Haltestelle] = []
 
     async def async_step_user(self, user_input=None):
         errors = {}
 
         if user_input is not None:
             try:
-                self.haltestellen = await self.hass.async_add_executor_job(
+                self._haltestellen = await self.hass.async_add_executor_job(
                     self._api.get_haltestellen, user_input[CONFIG_STOP_NAME]
                 )
             except ValueError:
-                errors[CONFIG_STOP_NAME] = "invalid_stop_name"
-                raise PlatformNotReady("Failed to fetch VAG data") from None
+                errors[CONFIG_STOP_NAME] = "failed_to_connect"
+
+            if not self._haltestellen:
+                errors[CONFIG_STOP_NAME] = "no_bus_stop_found"
 
             if not errors:
-                return await self.async_step_product()
+                return await self.async_step_street()
 
         return self.async_show_form(
             step_id="user",
@@ -70,103 +66,62 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_product(self, user_input=None):
-        """Second step to define VGN number and product."""
+    async def async_step_street(self, user_input=None):
         errors = {}
-        hs_names = [x.name for x in self.haltestellen]
-        haltestelle = None
+        hs_names = [x.name for x in self._haltestellen]
 
         if user_input is not None:
-            try:
-                haltestelle = self._find_haltestelle_by_name(
-                    user_input[CONFIG_STOP_NAME]
-                )
-            except ValueError:
-                errors[
-                    CONFIG_STOP_NAME
-                ] = f'Keine Haltestelle mit Namen "{user_input[CONFIG_STOP_NAME]}" gefunden'
+            haltestelle = next(
+                filter(
+                    lambda x: x.name == user_input[CONFIG_STOP_NAME],
+                    self._haltestellen,
+                ),
+                None,
+            )
+
+            if not haltestelle:
+                errors[CONFIG_STOP_NAME] = "no_bus_stop_found"
 
             if not errors:
-                self.entry_data[CONFIG_STOP_NAME] = user_input[CONFIG_STOP_NAME]
-                self.entry_data[CONFIG_STOP_VGN_NUMBER] = haltestelle.vgn_number
-                self.entry_data[CONFIG_LINE_NAME] = user_input[CONFIG_LINE_NAME]
-                self.entry_data[CONFIG_PRODUCT_NAME] = user_input[CONFIG_PRODUCT_NAME]
+                self._entry_data[CONFIG_STOP_NAME] = user_input[CONFIG_STOP_NAME]
+                self._entry_data[CONFIG_STOP_VGN_NUMBER] = haltestelle.vgn_number
 
-                return await self.async_step_direction()
+                entry_title = slugify(f"{self._entry_data[CONFIG_STOP_NAME]}")
+
+                await self.async_set_unique_id(entry_title)
+                self._abort_if_unique_id_configured()
+
+                abfahrten = await self.hass.async_add_executor_job(
+                    self._api.get_abfahrten, haltestelle.vgn_number
+                )
+                # remove "duplicate" Abfahrten:
+                # same product, line name and direction but different time
+                abfahrten = list(set(abfahrten))
+
+                for abfahrt in abfahrten:
+                    self._entry_data[CONFIG_STOP_LIST].append(
+                        {
+                            CONFIG_STOP_VGN_NUMBER: abfahrt.stop_point,
+                            CONFIG_LINE_NAME: abfahrt.line_name,
+                            CONFIG_PRODUCT_NAME: abfahrt.product,
+                            CONFIG_DIRECTION: abfahrt.direction,
+                            CONFIG_DIRECTION_TEXT: abfahrt.direction_text,
+                        }
+                    )
+
+                return self.async_create_entry(
+                    title=entry_title,
+                    data=self._entry_data,
+                )
 
         return self.async_show_form(
-            step_id="product",
+            step_id="street",
             data_schema=vol.Schema(
                 {
                     vol.Required(CONFIG_STOP_NAME): selector(
                         {"select": {"options": hs_names, "mode": "dropdown"}}
                     ),
-                    vol.Required(CONFIG_PRODUCT_NAME): selector(
-                        {
-                            "select": {
-                                "options": VGN_PRODUCTS,
-                                "mode": "dropdown",
-                            }
-                        }
-                    ),
-                    vol.Required(CONFIG_LINE_NAME): cv.string,
                 }
             ),
             errors=errors,
         )
-
-    async def async_step_direction(self, user_input=None):
-        """Third step to define direction."""
-        errors = {}
-
-        abfahrten = None
-        directions = {}
-
-        try:
-            abfahrten = await self.hass.async_add_executor_job(
-                self._api.get_abfahrten,
-                self.entry_data[CONFIG_STOP_VGN_NUMBER],
-                self.entry_data[CONFIG_LINE_NAME],
-            )
-
-            for ab in abfahrten:
-                directions[ab.direction_text] = ab.direction
-        except ValueError:
-            raise ValueError
-
-        if user_input is not None:
-            self.entry_data[CONFIG_DIRECTION_TEXT] = user_input[CONFIG_DIRECTION_TEXT]
-            self.entry_data[CONFIG_DIRECTION] = directions[
-                user_input[CONFIG_DIRECTION_TEXT]
-            ]
-
-            entry_title = f"{self.entry_data[CONFIG_STOP_NAME]} - {self.entry_data[CONFIG_PRODUCT_NAME]} - {self.entry_data[CONFIG_LINE_NAME]} - {self.entry_data[CONFIG_DIRECTION_TEXT]}"
-
-            if not errors:
-                return self.async_create_entry(
-                    title=entry_title,
-                    data={DOMAIN: self.entry_data},
-                )
-
-        return self.async_show_form(
-            step_id="direction",
-            data_schema=vol.Schema(
-                {
-                    vol.Required(CONFIG_DIRECTION_TEXT): selector(
-                        {
-                            "select": {
-                                "options": list(directions.keys()),
-                                "mode": "dropdown",
-                            }
-                        }
-                    ),
-                }
-            ),
-            errors=errors,
-        )
-
-    def _find_haltestelle_by_name(self, name: str):
-        for hs in self.haltestellen:
-            if hs.name == name:
-                return hs
-        raise ValueError

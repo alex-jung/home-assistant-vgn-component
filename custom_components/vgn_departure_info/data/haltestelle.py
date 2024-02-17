@@ -1,9 +1,7 @@
-"""Bus stop module."""
+"""Bus/Tram/UBahn/SBahn stop module."""
 
 
 class Haltestelle:
-    """Represents a bus stop."""
-
     def __init__(
         self, name: str, vag_number: str, vgn_number: str, products: str | None
     ) -> None:
@@ -35,5 +33,5 @@ class Haltestelle:
 
     @property
     def products(self):
-        """Returns vag products supoorted by this bus stop."""
+        """Returns vgn products supoorted by this bus stop."""
         return self._products

@@ -32,6 +32,11 @@ REST_API_STOP_POINT_TEXT_TAG: Final = "HaltesteigText"
 # Config entry data
 CONFIG_STOP_NAME: Final = "stop_name"
 CONFIG_STOP_VGN_NUMBER: Final = "stop_vgn_number"
+CONFIG_STOP_LIST: Final = "stop_list"
+
+# fetch update interval
+FETCH_UPDATE_INTERVAL = 60  # seconds
+
 CONFIG_LINE_NAME: Final = "line_name"
 CONFIG_PRODUCT_NAME: Final = "product_name"
 CONFIG_DIRECTION: Final = "direction"
