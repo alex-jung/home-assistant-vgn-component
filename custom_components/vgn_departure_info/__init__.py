@@ -1,17 +1,19 @@
 """Bus notification integration."""
+
 from homeassistant import core
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import Platform
 from homeassistant.core import HomeAssistant
 
 from .const import DOMAIN
-from .vgn_coordinator import VgnCoordinator
+from .vgn_update_coordinator import VgnUpdateCoordinator
 
 PLATFORMS = [Platform.SENSOR]
 
 
 async def async_setup_entry(hass: core.HomeAssistant, entry: ConfigEntry) -> bool:
-    coordinator = VgnCoordinator(hass, entry)
+    """ToDo."""
+    coordinator = VgnUpdateCoordinator(hass, entry)
 
     await coordinator.async_config_entry_first_refresh()
 

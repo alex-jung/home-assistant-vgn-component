@@ -14,10 +14,6 @@
         "data": {
           "stop_name": "Bus stop name"
         }
-      },
-      "street":{
-        "description": "Choose correct bus stop",
-        "title": "VGN Bus stop"
       }
     }
   }

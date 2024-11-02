@@ -1,23 +1,45 @@
 {
+  "title": "VGN Departures",
   "config": {
     "error": {
-      "no_bus_stop_found": "Keine Haltestelle zu dem Namen found",
-      "failed_to_connect": "Connection Fehler"
+      "error_no_stop_found": "Keine Haltestelle mit dem Namen ... gefunden",
+      "failed_to_connect": "VGN REST-API Server Verbindungsfehler"
     },
     "abort": {
       "already_configured": "Konfiguration ist bereits vorhanden"
     },
     "step": {
       "user": {
-        "description": "Geben Sie Haltestellenname ein z.B. Frankenstr",
+        "description": "Geben Sie Haltestellenname ein. z.B. Frankenstr",
         "title": "Haltestelle",
         "data": {
           "stop_name": "Name"
         }
       },
-      "street": {
-        "description": "Wählen Sie die Haltestelle",
-        "title": "Haltestelle"
+      "station": {
+        "description": "Wählen Sie die gewünschte Haltestelle aus",
+        "title": "Haltestelle & Transportmittel",
+        "data": {
+          "stop_name": "Name",
+          "transport_type": "Transportmittel"
+        }
+      },
+      "connections": {
+        "title": "Verbindungen",
+        "description": "Bitte wählen Sie die Verbindungen aus, die im Home Assistant überwacht werden.",
+        "data": {
+          "connections": "Verbindungen"
+        }
+      }
+    }
+  },
+  "selector": {
+    "transport_type": {
+      "options": {
+        "Bus": "Bus",
+        "Rail": "Zug",
+        "UBahn": "U-Bahn",
+        "Tram": "Straßenbahn"
       }
     }
   }

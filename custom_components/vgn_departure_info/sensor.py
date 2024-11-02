@@ -1,15 +1,25 @@
 """Github custom component."""
-from datetime import UTC, datetime
+
 import logging
 
 from homeassistant import config_entries, core
 from homeassistant.components.sensor import SensorEntity
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
+from homeassistant.util import slugify
 
-from .const import CONFIG_DIRECTION, CONFIG_LINE_NAME, CONFIG_PRODUCT_NAME, DOMAIN
-from .data.abfahrt import Abfahrt
-from .vgn_coordinator import VgnCoordinator
+from .const import (
+    DOMAIN,
+    MAX_DEPARTURES,
+    ATTR_DIRECTION,
+    ATTR_STOP_ID,
+    ATTR_DEPARTURES,
+    ATTR_DIRECTION_TEXT,
+    ATTR_LINE_NAME,
+    ATTR_TRANSPORT_TYPE,
+)
+from .vgn.data_classes import Departure, SensorData, TransportType
+from .vgn_update_coordinator import VgnUpdateCoordinator
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -18,120 +28,130 @@ async def async_setup_entry(
     hass: core.HomeAssistant, entry: config_entries.ConfigEntry, async_add_entities
 ):
     """Set up config entries."""
-    coordinator: VgnCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: VgnUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
 
-    new_entities = []
+    async_add_entities(
+        [
+            VgnSensorEntity(hass, coordinator, entry_data)
+            for entry_data in coordinator.sensors
+        ],
+        update_before_add=True,
+    )
 
-    for entry_data in coordinator.entries:
-        new_entities.append(VgnNextStopEntity(hass, coordinator, entry_data))
 
-    async_add_entities(new_entities)
-
-
-class VgnNextStopEntity(CoordinatorEntity, SensorEntity):
+class VgnSensorEntity(CoordinatorEntity, SensorEntity):
     """Custom entity for VGN information."""
 
     def __init__(
-        self, hass: HomeAssistant, coordinator: VgnCoordinator, data: dict
+        self,
+        hass: HomeAssistant,
+        coordinator: VgnUpdateCoordinator,
+        data: SensorData,
     ) -> None:
+        """ToDo."""
         super().__init__(coordinator)
+
+        _LOGGER.debug("Create VGN sensor with data: %s", data)
+
         self._hass = hass
         self._coordinator = coordinator
-        self._direction = data[CONFIG_DIRECTION]
-        self._product = data[CONFIG_PRODUCT_NAME]
-        self._line = data[CONFIG_LINE_NAME]
+        self._line = data["line_name"]
+        self._direction = data["direction"]
+        self._stop_id = data["stop_id"]
+        self._transport = TransportType(data["transport"])
+        self._direction_text = data["direction_text"]
+        self._value = "unknown"
 
-        title = self._coordinator.title
-
-        self._attr_name = f"vgn_{title}_{self._product}_{self._line}_{self._direction}"
-        self._attr_unique_id = (
-            f"vgn_{title}_{self._product}_{self._line}_{self._direction}"
+        self._attr_name = f"{coordinator.title} - {self._transport.value} {self._line} - {self._direction_text}"
+        self._attr_unique_id = slugify(
+            f"{self._coordinator.title}_{self._transport.value}_{self._line}_{self._direction_text}_{self._direction}"
         )
         self._attr_should_poll = False
-        self._value = "..."
 
-        _LOGGER.info("VGN Sensor entity created")
+        self._attr_extra_state_attributes = {
+            ATTR_LINE_NAME: self._line,
+            ATTR_STOP_ID: self._stop_id,
+            ATTR_TRANSPORT_TYPE: self._transport.value,
+            ATTR_DIRECTION: self._direction,
+            ATTR_DIRECTION_TEXT: self._direction_text,
+        }
+
+        _LOGGER.info("VGN sensor entity created - Unique id: %s", self._attr_unique_id)
+        _LOGGER.debug("line: %s", self._line)
+        _LOGGER.debug("direction: %s", self._direction)
+        _LOGGER.debug("station_id: %s", self._stop_id)
+        _LOGGER.debug("transport: %s", self._transport)
+        _LOGGER.debug("direction_text: %s", self._direction_text)
+        _LOGGER.debug("value: %s", self._value)
 
     @property
     def native_value(self):
         """Returns value of this sensor."""
         return self._value
 
+    @property
+    def icon(self) -> str | None:
+        """Icon of the entity, based on transport type."""
+        match self._transport:
+            case TransportType.BUS:
+                return "mdi:bus"
+            case TransportType.TRAM:
+                return "mdi:tram"
+            case TransportType.SUBWAY:
+                return "mdi:subway"
+            case _:
+                return "mdi:eye"
+
     @callback
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
 
-        # _LOGGER.info(f"Updating VGN sensor: {self._product}-{self._direction}")
-        # _LOGGER.info(f"From coordinator got {len(self._coordinator.data)} Abfahrten")
+        _LOGGER.info("Updating VGN sensor: %s", self._attr_name)
+        _LOGGER.debug("self._direction: %s", self._direction)
+        _LOGGER.debug("self._direction_text: %s", self._direction_text)
+        _LOGGER.debug("self._line: %s", self._line)
+        _LOGGER.debug("self._transport: %s", self._transport)
 
-        abfahrten: list[Abfahrt] = list(
+        _LOGGER.info(
+            "From coordinator got %s departures",
+            len(self._coordinator.data) if self._coordinator.data else 0,
+        )
+
+        departures: list[Departure] = self._coordinator.data
+
+        if not departures:
+            _LOGGER.debug("No data available from coordinator")
+            return
+
+        my_departures = list(
             filter(
-                lambda x: x.direction == self._direction
-                and x.line_name == self._line
-                and x.product == self._product,
-                self._coordinator.data,
+                lambda x: x.direction == self._direction and x.line_name == self._line,
+                departures,
             )
         )
 
-        if not abfahrten:
-            self._value = "-"
+        _LOGGER.debug("My departures:")
+        for departure in my_departures:
+            _LOGGER.debug(departure)
 
-            self._attr_extra_state_attributes = {
-                "Linename": "-",
-                "Direction": "-",
-                "Richtungstext": "-",
-                "AbfahrtszeitSoll": "-",
-                "AbfahrtszeitIst": "-",
-                "Prognose": "-",
-                "Besetzgrad": "-",
-                "last_update": datetime.now(),
-                "Verzoegerung": "-",
-            }
+        if not my_departures:
+            _LOGGER.warning("No departures received")
+
+            self._value = None
             self.async_write_ha_state()
+
             return
 
-        # _LOGGER.info(f"After filtering got {len(abfahrten)} Abfahrten")
-        # _LOGGER.info(abfahrten)
+        next_departure = my_departures[0]
 
-        abfahrten = sorted(abfahrten, key=lambda x: x.departure_must)
-        next_abfahrt: Abfahrt = abfahrten[0]
+        _LOGGER.debug("Next departure:")
+        _LOGGER.debug(next_departure)
 
-        # _LOGGER.info(f"Next Abfahrt: {next_abfahrt}")
-        # _LOGGER.info("-" * 30)
+        self._value = next_departure.actual_departure_time.replace(second=0)
 
-        # calculate value
-        soll_time = next_abfahrt.departure_must
-        ist_time = next_abfahrt.departure_is
-
-        delay = ist_time - soll_time
-        delta = ist_time - datetime.now(UTC)
-
-        (delta_days, delta_hours, delta_minutes) = self._days_hours_minutes(delta)
-
-        # set extra attributes
-        self._attr_extra_state_attributes = {
-            "Linename": next_abfahrt.line_name,
-            "Direction": next_abfahrt.direction,
-            "Richtungstext": next_abfahrt.direction_text,
-            "AbfahrtszeitSoll": next_abfahrt.departure_must,
-            "AbfahrtszeitIst": next_abfahrt.departure_is,
-            "Prognose": next_abfahrt.prognose,
-            "Besetzgrad": next_abfahrt.occupancy_level,
-            "last_update": datetime.now(),
-            "Verzoegerung": delay.total_seconds(),
-        }
-
-        if delta_days > 0:
-            self._value = f"in {delta_days} Tagen"
-
-        if delta_hours > 0:
-            self._value = f"in {delta_hours} Std"
-        elif delta_minutes > 0:
-            self._value = f"in {delta_minutes} Min"
-        else:
-            self._value = "Jetzt"
+        self._attr_extra_state_attributes["departures"] = [
+            x.actual_departure_time.replace(second=0)
+            for x in departures[:MAX_DEPARTURES]
+        ]
 
         self.async_write_ha_state()
-
-    def _days_hours_minutes(self, td):
-        return td.days, td.seconds // 3600, (td.seconds // 60) % 60
