@@ -3,9 +3,11 @@ from typing import Final
 DOMAIN = "vgn_departure_info"
 
 # fetch update interval
-FETCH_UPDATE_INTERVAL = 60  # seconds
+FETCH_UPDATE_INTERVAL = 30  # seconds
 REQUEST_TIME_SPAN = 60  # minutes
 MAX_DEPARTURES = 5
+
+ERROR_GTFS_NOT_FOUND = "gtfs_not_found"
 
 # Config entry data
 CONFIG_TRANSPORT_TYPE: Final = "transport_type"

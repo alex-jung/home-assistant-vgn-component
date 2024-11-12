@@ -1,187 +1,219 @@
-from datetime import datetime, timedelta
+import asyncio
 import logging
 from pathlib import Path
+import re
+from typing import Final
 
-import gtfs_kit as gk
+import aiofiles
+import aiofiles.os
+import aiofiles.ospath
+from aiopath import AsyncPath
+import aioshutil
+from async_lru import alru_cache
+import polars as pl
 
-from homeassistant.util import dt as dt_util
-
-# from homeassistant.util import dt
-from .data_classes import Departure, TransportType
+from .data_classes import Connection, Departures, Stop
+from .helpers import datestr_to_date, weekday_to_str
 
 _LOGGER = logging.getLogger(__name__)
 
-import tzlocal
+GTFS_LOCATION: Final = f"{Path(__file__).resolve().parent}/data/GTFS.zip"
 
 
-class VGNGtfsClient:
-    """ToDo."""
+class ApiGtfs:
+    def __init__(self) -> None:
+        self._agency: pl.DataFrame | None
+        self._calendar: pl.DataFrame | None
+        self._calendar_dates: pl.DataFrame | None
+        self._routes: pl.DataFrame | None
+        self._stops: pl.DataFrame | None
+        self._stop_times: pl.DataFrame | None
+        self._transfers: pl.DataFrame | None
+        self._trips: pl.DataFrame | None
 
-    _instance = None
-    _initialized = False
-    _feed = None
-    _df_stops = None
-    _df_routes = None
-    _df_stop_times = None
-    _df_trips = None
+    async def load(self):
+        _LOGGER.debug("Loading GTFS data files")
 
-    @classmethod
-    def instance(cls):
-        """ToDo."""
-        if cls._instance is None:
-            cls._instance = cls.__new__(cls)
-            cls._load_gtfs()
+        path = AsyncPath(GTFS_LOCATION)
 
-        return cls._instance
+        if not await path.exists():
+            raise ValueError(f'GTFS zip file path "{path}" does not exist')
 
-    @classmethod
-    def _load_gtfs(cls):
-        data_path = Path(f"{Path(__file__).resolve().parent}/data/GTFS.zip")
+        async with aiofiles.tempfile.TemporaryDirectory() as tmp_dir:
+            await aioshutil.unpack_archive(str(path), tmp_dir, format="zip")
 
-        if not data_path.exists():
-            raise RuntimeError(f'GTFS zip file "{data_path}" not found')
+            for file in await aiofiles.os.listdir(tmp_dir):
+                file_path = f"{tmp_dir}/{file}"
 
-        cls._feed = gk.read_feed(data_path, dist_units="km")
+                _LOGGER.debug("Reading file %s", file_path)
 
-        _LOGGER.debug("Start loading GTFS data")
+                match file:
+                    case "stops.txt":
+                        self._stops = await self._read_df(file_path)
+                    case "agency.txt":
+                        self._agency = await self._read_df(file_path)
+                    case "transfers.txt":
+                        self._transfers = await self._read_df(file_path)
+                    case "calendar.txt":
+                        self._calendar = await self._read_df(file_path)
+                    case "calendar_dates.txt":
+                        self._calendar_dates = await self._read_df(file_path)
+                    case "stop_times.txt":
+                        self._stop_times = await self._read_df(file_path)
+                    case "trips.txt":
+                        self._trips = await self._read_df(file_path)
+                    case "routes.txt":
+                        self._routes = await self._read_df(file_path)
+                    case _:
+                        _LOGGER.warning("Ignore unknown file %s", file_path)
 
-        cls._df_stops = cls._feed.get_stops()
-        cls._df_routes = cls._feed.get_routes()
-        cls._df_stop_times = cls._feed.get_stop_times()
-        cls._df_trips = cls._feed.get_trips()
+        _LOGGER.debug("GTFS data files loaded")
 
-        _LOGGER.debug("GTFS data loaded")
+    @alru_cache
+    async def stops(
+        self, name: str | None = None, incl_parents: bool = False
+    ) -> list[Stop]:
+        stops = self._stops.clone()
 
-        VGNGtfsClient._initialized = True
+        _LOGGER.debug("Get stops for name: %s", name)
 
-    def stops(
-        self, name: str, incl_parents: bool = False, case_sensitive: bool = False
-    ):
-        if not VGNGtfsClient._initialized:
-            raise RuntimeError("VgnGtfsClient is not initialized")
+        df = None
 
-        if not name:
-            raise ValueError("No stop name provided")
-
-        df = VGNGtfsClient._feed.get_stops().copy()
+        df_filters = []
 
         if not incl_parents:
-            df = df[df["location_type"].isna()]
+            expr_parents = ~pl.col("location_type").str.contains("1")
+            df_filters.append(expr_parents)
 
-        return df[df["stop_name"].str.contains(name, case=case_sensitive)]
+        if name:
+            expr_name = pl.col("stop_name").str.contains(f"(?i){name}")
+            df_filters.append(expr_name)
 
-    def trips(self, date: str | None = None, time: str | None = None):
-        if not VGNGtfsClient._initialized:
-            raise RuntimeError("VgnGtfsClient is not initialized")
+        df = stops.filter(*df_filters)
 
-        return VGNGtfsClient._feed.get_trips(date=date, time=time).copy()
+        groups = df.group_by(pl.col("stop_name"))
 
-    def stop_times(self, stop_id: list[str] | None = None):
-        if not VGNGtfsClient._initialized:
-            raise RuntimeError("VgnGtfsClient is not initialized")
+        stops = [Stop(name[0], data["stop_id"].to_list()) for name, data in groups]
 
-        df = VGNGtfsClient._feed.get_stop_times().copy()
+        _LOGGER.debug("Finished")
 
-        if not stop_id:
-            return df
+        return sorted(stops, key=lambda x: x.name)
 
-        return df[df["stop_id"].isin(stop_id)]
+    @alru_cache
+    async def connections(self, stop: Stop):
+        """Return connections for a stop."""
+        connections = []
 
-    def routes(
-        self,
-        date: str | None = None,
-        time: str | None = None,
-        transport_type: list[TransportType] | None = None,
-    ):
-        if not VGNGtfsClient._initialized:
-            raise RuntimeError("VgnGtfsClient is not initialized")
+        for id in stop.ids:
+            connections += await self._connections(id)
 
-        df = VGNGtfsClient._feed.get_routes(date=date, time=time).copy()
+        return connections
 
-        if transport_type:
-            values = [x.index for x in transport_type]
-            df = df[df["route_type"].isin(values)]
+    @alru_cache
+    async def departures(self, connection: Connection, date: str) -> list[str]:
+        if not connection:
+            raise ValueError("No connection instance provided")
+        if not date or not re.fullmatch(r"\d{8}", date):
+            raise ValueError("No date provided or invalid formate used")
 
-        return df
-
-    def departures(self, date: str, time_box: int, stop_id: list[str]):
-        if not VGNGtfsClient._initialized:
-            raise RuntimeError("VgnGtfsClient is not initialized")
-
-        df_times = VGNGtfsClient._feed.get_stop_times(date)[
-            ["trip_id", "departure_time", "stop_id"]
-        ]
-        df_trips = self._feed.get_trips(date).copy()
-
-        time_min = dt_util.now().replace(tzinfo=None)
-        time_max = time_min + timedelta(minutes=time_box)
-
-        def convert_to_datetime(time):
-            today = datetime.now()
-            year = today.year
-            month = today.month
-            day = today.day
-
-            result = None
-            timedelta = None
-
-            try:
-                hours, mins, secs = (int(x) for x in time.split(":"))
-                if hours >= 24:
-                    hours %= 24
-                    timedelta = timedelta(days=1)
-
-                result = datetime(
-                    year=year,
-                    month=month,
-                    day=day,
-                    hour=hours,
-                    minute=mins,
-                    second=secs,
-                )
-
-                if timedelta:
-                    result += timedelta
-            except Exception:
-                result = None
-            return result
-
-        trips_with_time = df_trips.merge(df_times, on="trip_id", how="left")
-
-        if stop_id:
-            trips_with_time = trips_with_time[trips_with_time["stop_id"].isin(stop_id)]
-
-        trips_with_time["departure_time"] = trips_with_time["departure_time"].apply(
-            convert_to_datetime
-        )
-        trips_with_time["departure_time"] = trips_with_time["departure_time"].astype(
-            "datetime64[ns]"
+        _LOGGER.debug(
+            'Searching for departures for "%s" on "%s"', connection.name, date
         )
 
-        if time_box:
-            _LOGGER.debug("Time now: %s", dt_util.now())
-            _LOGGER.debug("Time box: %s - %s", time_min, time_max)
+        routes = self._routes.clone()
+        stop_times: pl.DataFrame = self._stop_times.clone()
+        trips: pl.DataFrame = self._trips.clone()
 
-            trips_with_time = trips_with_time[
-                (trips_with_time["departure_time"] >= time_min)
-                & (trips_with_time["departure_time"] <= time_max)
-            ]
+        s_active_trips = await self._active_trips(date)
 
-        # add route information
-        routes = VGNGtfsClient._df_routes.copy()
-        routes = routes[["route_id", "route_short_name", "route_type"]]
+        s_routes = routes.filter(
+            pl.col("route_id").is_in(connection.route_ids)
+        ).get_column("route_id")
 
-        trips_with_time = trips_with_time.merge(routes, on="route_id", how="left")
-
-        return [
-            Departure(
-                x.stop_id,
-                x.route_short_name,
-                x.direction_id,
-                x.trip_headsign,
-                TransportType(x.route_type),
-                x.departure_time,
-                x.departure_time,
+        # get unique trips for requested connection
+        s_trips = (
+            trips.filter(
+                (pl.col("route_id").is_in(s_routes))
+                & (pl.col("trip_id").is_in(s_active_trips))
+                & (pl.col("direction_id") == connection.direction_id)
+                & (pl.col("trip_headsign") == connection.name)
             )
-            for x in trips_with_time.itertuples()
-        ]
+            .unique("trip_id")
+            .get_column("trip_id")
+        )
+
+        times = (
+            stop_times.filter(
+                (pl.col("trip_id").is_in(s_trips))
+                & (pl.col("stop_id") == connection.stop_id)
+            )
+            .get_column("departure_time")
+            .sort()
+        )
+
+        return Departures(connection.stop_id, date, times.to_list())
+
+    async def _active_trips(self, date: str) -> pl.Series:
+        trips: pl.DataFrame = self._trips.clone()
+        calendar: pl.DataFrame = self._calendar.clone()
+        calendar_dates: pl.DataFrame = self._calendar_dates.clone()
+
+        df_exceptions = calendar_dates.filter(pl.col("date") == int(date))
+
+        df_added = df_exceptions.filter(pl.col("exception_type") == 1).get_column(
+            "service_id"
+        )
+        df_removed = df_exceptions.filter(pl.col("exception_type") == 2).get_column(
+            "service_id"
+        )
+
+        weekday_str = weekday_to_str(datestr_to_date(date).weekday())
+
+        exp_match = (
+            (~pl.col("service_id").is_in(df_removed))
+            & (pl.col("start_date") < int(date))
+            & (pl.col("end_date") > int(date))
+            & ((pl.col(weekday_str) == 1) | (pl.col("service_id").is_in(df_added)))
+        )
+
+        s_active_services = calendar.filter(exp_match).get_column("service_id")
+
+        return trips.filter(pl.col("service_id").is_in(s_active_services)).get_column(
+            "trip_id"
+        )
+
+    async def _connections(self, stop_id: str):
+        routes = self._routes.clone()
+        trips = self._trips.clone()
+        stop_times = self._stop_times.clone()
+
+        # find trip_ids
+        trip_ids = (
+            stop_times.filter(pl.col("stop_id") == stop_id).select("trip_id").unique()
+        )
+
+        df_trips = trips.filter(pl.col("trip_id").is_in(trip_ids))
+
+        g_routes = routes.join(df_trips, on="route_id").group_by(
+            ["trip_headsign", "direction_id"]
+        )
+
+        connections = []
+
+        for name, data in g_routes:
+            c_name = name[0]
+            c_direction = name[1]
+            c_line_name = data.row(0, named=True)["route_short_name"]
+            c_transport = data.row(0, named=True)["route_type"]
+            c_routes = data.unique("route_id").get_column("route_id").to_list()
+
+            connections.append(
+                Connection(
+                    stop_id, c_name, c_line_name, c_transport, c_direction, c_routes
+                )
+            )
+
+        return connections
+
+    async def _read_df(self, path):
+        return await asyncio.get_running_loop().run_in_executor(None, pl.read_csv, path)

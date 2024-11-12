@@ -2,18 +2,22 @@
   "title": "VGN Departures",
   "config": {
     "error": {
-      "error_no_stop_found": "Keine Haltestelle mit dem Namen ... gefunden",
+      "error_no_stop_found": "Haltestelle \"{stop_name}\" nicht gefunden",
       "failed_to_connect": "VGN REST-API Server Verbindungsfehler"
     },
     "abort": {
-      "already_configured": "Konfiguration ist bereits vorhanden"
+      "already_configured": "Konfiguration ist bereits vorhanden",
+      "gtfs_not_found": "Die GTFS Datei wurde nicht gefunden"
     },
     "step": {
       "user": {
-        "description": "Geben Sie Haltestellenname ein. z.B. Frankenstr",
+        "description": "Geben Sie Haltestellenname ein. z.B. \"Frankenstr.\"",
         "title": "Haltestelle",
         "data": {
-          "stop_name": "Name"
+          "stop_name": "Haltestelle"
+        },
+        "data_description": {
+          "stop_name": "Groß- und Kleinschreibung sind irrelevant."
         }
       },
       "station": {

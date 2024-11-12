@@ -9,17 +9,16 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import slugify
 
 from .const import (
-    DOMAIN,
-    MAX_DEPARTURES,
-    ATTR_DIRECTION,
-    ATTR_STOP_ID,
     ATTR_DEPARTURES,
+    ATTR_DIRECTION,
     ATTR_DIRECTION_TEXT,
     ATTR_LINE_NAME,
+    ATTR_STOP_ID,
     ATTR_TRANSPORT_TYPE,
+    MAX_DEPARTURES,
 )
-from .vgn.data_classes import Departure, SensorData, TransportType
-from .vgn_update_coordinator import VgnUpdateCoordinator
+from .coordinator import VgnUpdateCoordinator
+from .vgn.data_classes import Connection, Departures, TransportType
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -28,12 +27,14 @@ async def async_setup_entry(
     hass: core.HomeAssistant, entry: config_entries.ConfigEntry, async_add_entities
 ):
     """Set up config entries."""
-    coordinator: VgnUpdateCoordinator = hass.data[DOMAIN][entry.entry_id]
+    coordinator: VgnUpdateCoordinator = entry.runtime_data
+
+    await coordinator.async_config_entry_first_refresh()
 
     async_add_entities(
         [
             VgnSensorEntity(hass, coordinator, entry_data)
-            for entry_data in coordinator.sensors
+            for entry_data in coordinator.connections
         ],
         update_before_add=True,
     )
@@ -46,37 +47,38 @@ class VgnSensorEntity(CoordinatorEntity, SensorEntity):
         self,
         hass: HomeAssistant,
         coordinator: VgnUpdateCoordinator,
-        data: SensorData,
+        connection: Connection,
     ) -> None:
         """ToDo."""
         super().__init__(coordinator)
 
-        _LOGGER.debug("Create VGN sensor with data: %s", data)
+        _LOGGER.info("Create VGN sensor with connection: %s", connection)
+        self._hass: HomeAssistant = hass
+        self._coordinator: VgnUpdateCoordinator = coordinator
+        self._uid: str = connection.uid
+        self._line: str = connection.line_name
+        self._direction: int = connection.direction_id
+        self._stop_id: str = connection.stop_id
+        self._transport: TransportType = connection.transport
+        self._direction_text: str = connection.name
+        self._value = None
 
-        self._hass = hass
-        self._coordinator = coordinator
-        self._line = data["line_name"]
-        self._direction = data["direction"]
-        self._stop_id = data["stop_id"]
-        self._transport = TransportType(data["transport"])
-        self._direction_text = data["direction_text"]
-        self._value = "unknown"
-
-        self._attr_name = f"{coordinator.title} - {self._transport.value} {self._line} - {self._direction_text}"
+        self._attr_name = f"{coordinator.title} - {self._transport} {self._line} - {self._direction_text}"
         self._attr_unique_id = slugify(
             f"{self._coordinator.title}_{self._transport.value}_{self._line}_{self._direction_text}_{self._direction}"
         )
         self._attr_should_poll = False
 
         self._attr_extra_state_attributes = {
-            ATTR_LINE_NAME: self._line,
             ATTR_STOP_ID: self._stop_id,
-            ATTR_TRANSPORT_TYPE: self._transport.value,
+            ATTR_LINE_NAME: self._line,
+            ATTR_TRANSPORT_TYPE: str(self._transport),
             ATTR_DIRECTION: self._direction,
             ATTR_DIRECTION_TEXT: self._direction_text,
         }
 
         _LOGGER.info("VGN sensor entity created - Unique id: %s", self._attr_unique_id)
+        _LOGGER.debug("hass: %s", self._hass)
         _LOGGER.debug("line: %s", self._line)
         _LOGGER.debug("direction: %s", self._direction)
         _LOGGER.debug("station_id: %s", self._stop_id)
@@ -112,6 +114,17 @@ class VgnSensorEntity(CoordinatorEntity, SensorEntity):
         _LOGGER.debug("self._line: %s", self._line)
         _LOGGER.debug("self._transport: %s", self._transport)
 
+        _LOGGER.debug("Received data: %s", self._coordinator.data[self._uid])
+
+        data = self._coordinator.data[self._uid]
+
+        if data and data["times"]:
+            self._value = data["times"][0]
+
+        self.async_write_ha_state()
+
+        return
+
         _LOGGER.info(
             "From coordinator got %s departures",
             len(self._coordinator.data) if self._coordinator.data else 0,
@@ -122,6 +135,9 @@ class VgnSensorEntity(CoordinatorEntity, SensorEntity):
         if not departures:
             _LOGGER.debug("No data available from coordinator")
             return
+
+        # for d in departures:
+        #    _LOGGER.debug(d)
 
         my_departures = list(
             filter(
@@ -147,11 +163,28 @@ class VgnSensorEntity(CoordinatorEntity, SensorEntity):
         _LOGGER.debug("Next departure:")
         _LOGGER.debug(next_departure)
 
-        self._value = next_departure.actual_departure_time.replace(second=0)
+        self._value = next_departure.actual_departure_time
 
         self._attr_extra_state_attributes["departures"] = [
-            x.actual_departure_time.replace(second=0)
-            for x in departures[:MAX_DEPARTURES]
+            x.actual_departure_time for x in departures[:MAX_DEPARTURES]
         ]
+
+        _LOGGER.debug("Start timer!!!!!!!!!")
+        data = {
+            "event_type": "call_service",
+            "data": {
+                "domain": "timer",
+                "service": "start",
+                "service_data": {"entity_id": "timer.test_timer"},
+            },
+        }
+        self.hass.bus.async_fire(
+            "timer",
+            event_data={
+                "domain": "timer",
+                "service": "start",
+                "service_data": {"entity_id": "timer.test_timer"},
+            },
+        )
 
         self.async_write_ha_state()

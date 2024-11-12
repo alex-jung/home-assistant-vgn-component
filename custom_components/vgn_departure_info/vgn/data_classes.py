@@ -1,230 +1,139 @@
-from dataclasses import dataclass
-import datetime
-from enum import StrEnum
-
-from aenum import MultiValueEnum
-
-
-class TransportType(MultiValueEnum):
-    TRAM = "Tram", 0
-    SUBWAY = "UBahn", 1
-    RAIL = "Zug", 2
-    BUS = "Bus", 3
-    FERRY = "Fähre", 4
-    CABLE_TRAM = "Kabelstraßenbahn", 5
-    AERIAL_LIFT = "Luftseilbahn", 6
-    FUNICULAR = "Standseilbahn", 7
-    TROLLEYBUS = "Oberleitungsbus", 8
-    MONORAIL = "Einschienenbahn", 9
-
-    @property
-    def index(self):
-        return self.values[1]
-
-    @classmethod
-    def from_text(cls, value: str):
-        match value:
-            case "Tram":
-                return TransportType.TRAM
-            case "UBahn" | "U-Bahn":
-                return TransportType.SUBWAY
-            case "Zug":
-                return TransportType.RAIL
-            case "Bus":
-                return TransportType.BUS
-            case "Fähre":
-                return TransportType.FERRY
-            case "Kabelstraßenbahn":
-                return TransportType.CABLE_TRAM
-            case "Luftseilbahn":
-                return TransportType.AERAL_LIFT
-            case "Standseilbahn":
-                return TransportType.FUNICULAR
-            case "Oberleitungsbus":
-                return TransportType.TROLLEYBUS
-            case "Einschienenbahn":
-                return TransportType.MONORAIL
+from dataclasses import dataclass, asdict
+import datetime as dt
+from enum import IntEnum
+import json
+from .helpers import datestr_to_date
+from homeassistant.util import dt as dt_util
+import zoneinfo
 
 
-class OccupancyLevel(StrEnum):
-    UNKNOWN = "Unbekannt"
-    WEAKLY = "Schwachbesetzt"
-    HEAVILY = "Starkbesetzt"
-    CROWDED = "Ueberfuellt"
+class TransportType(IntEnum):
+    TRAM = 0
+    SUBWAY = 1
+    RAIL = 2
+    BUS = 3
+    FERRY = 4
+    CABLE_TRAM = 5
+    AERIAL_LIFT = 6
+    FUNICULAR = 7
+    TROLLEYBUS = 8
+    MONORAIL = 9
+
+    def __str__(self) -> str:
+        match self.value:
+            case TransportType.TRAM:
+                return "Straßenbahn"
+            case TransportType.SUBWAY:
+                return "U-Bahn"
+            case TransportType.RAIL:
+                return "Zug"
+            case TransportType.BUS:
+                return "Bus"
+            case TransportType.FERRY:
+                return "Fähre"
+            case TransportType.CABLE_TRAM:
+                return "Seilbahn"
+            case TransportType.AERIAL_LIFT:
+                return "Luftseilbahn"
+            case TransportType.FUNICULAR:
+                return "Funikulär"
+            case TransportType.TROLLEYBUS:
+                return "Oberleitungsbus"
+            case TransportType.MONORAIL:
+                return "Einschienenbahn"
+            case _:
+                return "Unknown"
 
 
-class Route:
-    def __init__(
-        self, id: str, short_name: str, long_name: str, transport_type: int
-    ) -> None:
-        if not id:
-            raise ValueError("Route id can not be empty")
-
-        self._id = id.strip()
-        self._short_name = short_name
-        self._long_name = long_name.replace("  ", " ")
-        self._transport_type = TransportType(transport_type)
+@dataclass
+class Stop:
+    name: str
+    ids: list[str]
 
     @property
-    def id(self):
-        return self._id
+    def is_parent(self):
+        return any(x.startswith("Parent") for x in self.ids)
 
-    @property
-    def short_name(self):
-        return self._short_name
+    def __eq__(self, value: object) -> bool:
+        if not isinstance(value, Stop):
+            return False
 
-    @property
-    def long_name(self):
-        return self._long_name
+        return self.name == value.name
 
-    @property
-    def night_line(self):
-        return self._id.startswith("16")
-
-    @property
-    def transport_type(self) -> TransportType:
-        return self._transport_type
+    def __lt__(self, other):
+        return self.name < other.name
 
     def __hash__(self) -> int:
-        return hash(self._id)
-
-    def __str__(self) -> str:
-        return f"{self.id}: {self.transport_type.name} [{self.short_name}] - {self.long_name}"
+        return hash(self.name)
 
 
-@dataclass
-class Trip:
-    id: str
-    route: Route
-    departure_time: str
-    service_id: str
-    head_sign: str
-    direction: int
-    block_id: int = -1
-
-
-@dataclass()
-class Coordinates:
-    """Coordinates in WGS 84 Format in degrees."""
-
-    latitude: float
-    longitude: float
-
-
-@dataclass()
-class Station:
-    """Station data object class."""
-
-    name: str
-    station_id: int
-    coordinates: Coordinates
-    transport_types: list[TransportType]
-
-
-class Departure:
-    """Departure data object class."""
-
+class Connection:
     def __init__(
         self,
-        station_id: str,
+        stop_id: str,
+        name: str,
         line_name: str,
-        direction: int,
-        direction_text: str,
-        transport_type: TransportType,
-        planned_departure_time: datetime.datetime,
-        actual_departure_time: datetime.datetime,
-        coordinates: Coordinates | None = None,
-        occupancy_level: OccupancyLevel = OccupancyLevel.UNKNOWN,
-        ride_id: int = -1,
-        ride_type_id: int = -1,
-        vehicle_number: str | None = None,
-        forecast: bool = False,
+        transport: int,
+        direction_id: int,
+        route_id_s: list[str],
     ) -> None:
-        self.station_id = station_id
+        self.stop_id = stop_id
+        self.name = name
         self.line_name = line_name
-        self.direction = direction
-        self.direction_text = direction_text
-        self.transport_type = transport_type
-        self.planned_departure_time = planned_departure_time
-        self.actual_departure_time = actual_departure_time
-        self.coordinates = coordinates
-        self.occupancy_level = occupancy_level
-        self.ride_id = ride_id
-        self.ride_type_id = ride_type_id
-        self.vehicle_number = vehicle_number
-        self.forecast = forecast
+        self.transport = TransportType(transport)
+        self.direction_id = direction_id
+        self.route_ids = route_id_s
+        self.uid = f"{stop_id}#{name}#{line_name}#{transport}#{direction_id}"
 
-    def __str__(self) -> str:
-        return f'[{self.station_id}]-{self.transport_type.value} {self.line_name}[{self.direction}]-"{self.direction_text}"-{self.planned_departure_time}'
+    def to_dict(self):
+        return json.dumps(self, default=lambda obj: obj.__dict__)
 
+    @classmethod
+    def from_dict(cls, connection: str):
+        if not connection:
+            return None
 
-@dataclass()
-class Ride:
-    """Ride data object class."""
+        conn_dict = json.loads(connection)
 
-    ride_id: int
-    line_name: str
-    direction: str
-    operating_day: datetime.date
-    start_time: datetime.datetime
-    end_time: datetime.datetime
-    start_station_id: str
-    end_station_id: str
-    vehicle_number: str
+        return Connection(
+            conn_dict["stop_id"],
+            conn_dict["name"],
+            conn_dict["line_name"],
+            conn_dict["transport"],
+            conn_dict["direction_id"],
+            conn_dict["route_ids"],
+        )
 
 
-@dataclass()
-class RoutePoint:
-    """Single stop of a route."""
+class Departures:
+    def __init__(self, stop_id: str, date: str, times: list[str]) -> None:
+        self.stop_id = stop_id
+        self.times = self._convert_to_datetimes(date, times)
 
-    station_name: str
-    station_id: int
-    stop_point: str
-    planned_arrival_time: datetime.datetime
-    actual_arrival_time: datetime.datetime
-    planned_departure_time: datetime.datetime
-    actual_departure_time: datetime.datetime
-    direction_text: str
-    coordinates: Coordinates
-    transit: bool
-    no_boarding: bool
-    no_get_off: bool
-    additional_stop: bool
+    def _convert_to_datetimes(self, date: str, times: list[str]):
+        # r_date = dt_util.parse_date(date)
+        r_date = datestr_to_date(date)
 
+        r_times = []
 
-@dataclass
-class SensorData:
-    station_name: str
-    stop_id: str
-    transport: int
-    line_name: str
-    direction_text: str
-    direction: int
+        for time in times:
+            (hour, minute, _) = (int(x) for x in time.split(":"))
 
+            if hour >= 24:
+                r_date = r_date + dt.timedelta(days=1)
 
-class Stop:
-    def __init__(self, id: str, name: str) -> None:
-        self._id = id
-        self._name = name
+            r_times.append(
+                dt.datetime(
+                    year=r_date.year,
+                    month=r_date.month,
+                    day=r_date.day,
+                    hour=hour % 24,
+                    minute=minute,
+                    tzinfo=zoneinfo.ZoneInfo("Europe/Berlin"),
+                )
+            )
 
-    @property
-    def id(self):
-        return self._id
+        return r_times
 
-    @property
-    def name(self):
-        return self._name
-
-    @property
-    def vgn_number(self) -> str | None:
-        id_splited = self.id.split(":")
-
-        if len(id_splited) == 1:
-            return self._id
-        elif len(id_splited) >= 3:
-            return id_splited[2]
-
-        return None
-
-    def __str__(self) -> str:
-        return f'Stop(id={self.id},name="{self.name}",coordinates={self.coordinates},loc_type={self.loc_type},parent={self.parent})'
+    def to_dict(self):
+        return {"stop_id": self.stop_id, "times": self.times}
