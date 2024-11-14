@@ -1,12 +1,12 @@
 {
     "domain":"vgn_departure_info",
-    "name": "VGN Abfahrt Information",
-    "version": "0.0.2",
+    "name": "VGN Departures",
     "codeowners": ["@alex-jung"],
-    "documentation": "https://github.com/alex-jung/home-assistant-vgn-component",
-    "issue_tracker": "https://github.com/alex-jung/home-assistant-vgn-component/issues",
-    "integration_type": "hub",
-    "iot_class": "local_polling",
     "config_flow": true,
-    "requirements": ["requests"]
+    "documentation": "https://github.com/alex-jung/home-assistant-vgn-component",
+    "integration_type": "hub",
+    "iot_class": "cloud_push",
+    "issue_tracker": "https://github.com/alex-jung/home-assistant-vgn-component/issues",
+    "requirements": ["async-lru==2.0.4", "polars==1.12.0", "aiopath==0.7.7", "aiofiles==24.1.0", "aioshutil==1.5"],
+    "version": "0.0.2"
 }
