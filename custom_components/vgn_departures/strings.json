@@ -1,0 +1,31 @@
+{
+  "title": "VGN Departures",
+  "config": {
+    "error": {
+      "error_stop_not_found": "Station \"{stop_name}\" not found"
+    },
+    "abort": {
+      "error_already_configured": "[%key:common::config_flow::abort::already_configured_location%]",
+      "error_gtfs_not_found": "GTFS.zip file not found"
+    },
+    "step": {
+      "user": {
+        "description": "Please choose a station",
+        "title": "VGN Station",
+        "data": {
+          "stop_name": "Station"
+        }
+      },
+      "connections": {
+        "title": "VGN Connections",
+        "description": "Please select the connections to monitore in Home Assistant.",
+        "data": {
+          "connections": "Connections"
+        },
+        "data_description": {
+          "connections": "Multiple connections can be selected"
+        }
+      }
+    }
+  }
+}
