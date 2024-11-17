@@ -1,9 +1,9 @@
 # "VGN Departures" integration
 
+[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 ![Static Badge](https://img.shields.io/badge/code_owner-alex--jung-green)
 ![GitHub Release](https://img.shields.io/github/v/release/alex-jung/home-assistant-vgn-component)
 ![GitHub Downloads (all assets, all releases)](https://img.shields.io/github/downloads/alex-jung/home-assistant-vgn-component/total)
-[![hacs_badge](https://img.shields.io/badge/HACS-Custom-orange.svg)](https://github.com/custom-components/hacs)
 ![GitHub License](https://img.shields.io/github/license/alex-jung/home-assistant-vgn-component)
 ![Static Badge](https://img.shields.io/badge/GTFS-implemented-green)
 ![Static Badge](https://img.shields.io/badge/REST--API-in%20development-red)
@@ -73,7 +73,15 @@ sensor:
         friendly_name: 'Fürth Hauptbahnhof - Bus 179 - Fürth Süd(only time)'
         value_template: "{{ (as_datetime(states('sensor.furth_hauptbahnhof_bus_179_furth_sud'))).strftime('%H:%m') }}"
 ```
-Add entity (or entites) card to your Dashboars(don't forget to reload yaml before)
+Add entity (or entites) card to your Dashboars(don't forget to reload yaml before)\
+```yaml
+type: entities
+entities:
+  - entity: sensor.furth_197
+    name: Fürth Hauptbahnhof - Bus 179 - Fürth Süd
+    icon: mdi:bus
+```
+![image](https://github.com/user-attachments/assets/d813c9e4-0d5f-498e-81de-6abc88430c8c)
 
 ### Option 2 (with time-bar-card)
 To get more fancy stuff, you can use e.g. [time-bar-card](https://github.com/rianadon/timer-bar-card) to visualize remaining time to next departure:
@@ -96,7 +104,7 @@ entities:
     end_time:
       state: true
 ```
-Result looks like there:
+Result looks like there:\
 ![ezgif-3-136a167cd5](https://github.com/user-attachments/assets/3b8b8a09-1067-4d90-924a-729616c6e765)
 
 ### Option 3 (vgn-departures-card)
