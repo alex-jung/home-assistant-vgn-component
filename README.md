@@ -51,6 +51,9 @@ Here you can remove obsolete directions or add new by selection them in dialog.
 
 ## Usage in dashboard
 
-### Example 1
+### Example 1 (static)
 
-### Example 2
+### Example 2 (with progress-bar)
+
+![ezgif-3-136a167cd5](https://github.com/user-attachments/assets/3b8b8a09-1067-4d90-924a-729616c6e765)
+
