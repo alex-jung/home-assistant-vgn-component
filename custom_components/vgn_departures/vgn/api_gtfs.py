@@ -1,3 +1,5 @@
+"""API class to manage GTFS data."""
+
 import asyncio
 import logging
 from pathlib import Path
@@ -13,6 +15,7 @@ from async_lru import alru_cache
 import polars as pl
 
 from .data_classes import Connection, Departures, Stop
+from .exceptions import GtfsFileNotFound
 from .helpers import datestr_to_date, weekday_to_str
 
 _LOGGER = logging.getLogger(__name__)
@@ -21,7 +24,10 @@ GTFS_LOCATION: Final = f"{Path(__file__).resolve().parent}/data/GTFS.zip"
 
 
 class ApiGtfs:
+    """API for GTFS data."""
+
     def __init__(self) -> None:
+        """Initialize API."""
         self._agency: pl.DataFrame | None
         self._calendar: pl.DataFrame | None
         self._calendar_dates: pl.DataFrame | None
@@ -31,13 +37,14 @@ class ApiGtfs:
         self._transfers: pl.DataFrame | None
         self._trips: pl.DataFrame | None
 
-    async def load(self):
+    async def load(self) -> None:
+        """Extract GTFS zip file and load data contains in txt files."""
         _LOGGER.debug("Loading GTFS data files")
 
         path = AsyncPath(GTFS_LOCATION)
 
         if not await path.exists():
-            raise ValueError(f'GTFS zip file path "{path}" does not exist')
+            raise GtfsFileNotFound(f'GTFS zip file path "{path}" does not exist')
 
         async with aiofiles.tempfile.TemporaryDirectory() as tmp_dir:
             await aioshutil.unpack_archive(str(path), tmp_dir, format="zip")
@@ -73,6 +80,7 @@ class ApiGtfs:
     async def stops(
         self, name: str | None = None, incl_parents: bool = False
     ) -> list[Stop]:
+        """Return stops found in GTFS contain provided name(case insensitive)."""
         stops = self._stops.clone()
 
         _LOGGER.debug("Get stops for name: %s", name)
@@ -93,31 +101,35 @@ class ApiGtfs:
 
         groups = df.group_by(pl.col("stop_name"))
 
-        stops = [Stop(name[0], data["stop_id"].to_list()) for name, data in groups]
+        stops = []
 
-        _LOGGER.debug("Finished")
+        for n, data in groups:
+            stop = Stop(n[0], data["stop_id"].to_list())
+
+            stops.append(stop)
 
         return sorted(stops, key=lambda x: x.name)
 
     @alru_cache
-    async def connections(self, stop: Stop):
-        """Return connections for a stop."""
+    async def connections(self, stop: Stop) -> list[Connection]:
+        """Return connections for privided stop object."""
         connections = []
 
-        for id in stop.ids:
-            connections += await self._connections(id)
+        for stop_id in stop.ids:
+            connections += await self._connections(stop_id)
 
         return connections
 
     @alru_cache
-    async def departures(self, connection: Connection, date: str) -> list[str]:
+    async def departures(self, connection: Connection, date: str) -> Departures:
+        """Return all departiures for provided connection and date."""
         if not connection:
             raise ValueError("No connection instance provided")
         if not date or not re.fullmatch(r"\d{8}", date):
             raise ValueError("No date provided or invalid formate used")
 
         _LOGGER.debug(
-            'Searching for departures for "%s" on "%s"', connection.name, date
+            'Searching departures for connection "%s" on "%s"', connection.name, date
         )
 
         routes = self._routes.clone()
@@ -154,6 +166,7 @@ class ApiGtfs:
         return Departures(connection.stop_id, date, times.to_list())
 
     async def _active_trips(self, date: str) -> pl.Series:
+        """Return all active trips for provided date."""
         trips: pl.DataFrame = self._trips.clone()
         calendar: pl.DataFrame = self._calendar.clone()
         calendar_dates: pl.DataFrame = self._calendar_dates.clone()
@@ -182,7 +195,8 @@ class ApiGtfs:
             "trip_id"
         )
 
-    async def _connections(self, stop_id: str):
+    async def _connections(self, stop_id: str) -> list[Connection]:
+        """Return all connections for provided stop_id."""
         routes = self._routes.clone()
         trips = self._trips.clone()
         stop_times = self._stop_times.clone()
@@ -198,7 +212,7 @@ class ApiGtfs:
             ["trip_headsign", "direction_id"]
         )
 
-        connections = []
+        connections: list[Connection] = []
 
         for name, data in g_routes:
             c_name = name[0]
@@ -215,5 +229,6 @@ class ApiGtfs:
 
         return connections
 
-    async def _read_df(self, path):
+    async def _read_df(self, path) -> pl.DataFrame:
+        """Load csv file asyncron."""
         return await asyncio.get_running_loop().run_in_executor(None, pl.read_csv, path)

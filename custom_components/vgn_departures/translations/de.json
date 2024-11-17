@@ -1,0 +1,42 @@
+{
+  "title": "VGN Departures",
+  "options": {
+    "step":{
+      "init":{
+        "description": "Bitte wählen Sie die Verbindung(en) aus",
+        "title":"VGN Verbindungen",
+        "data": {
+          "connections": "Verbindungen"
+        }
+      }
+    },
+    "abort":{
+      "error_no_changes": "Keine Änderungunen an Konfiguration"
+    }
+  },
+  "config": {
+    "error": {
+      "error_stop_not_found": "Haltestelle \"{stop_name}\" wurde nicht gefunden"
+    },
+    "abort": {
+      "error_already_configured": "[%key:common::config_flow::abort::already_configured_location%]",
+      "error_gtfs_not_found": "Die GTFS.zip Datei wurde nicht gefunden"
+    },
+    "step": {
+      "user": {
+        "description": "Wählen Sie die gewünschte Haltestelle aus",
+        "title": "VGN Haltestelle",
+        "data": {
+          "stop_name": "Haltestelle"
+        }
+      },
+      "connections": {
+        "title": "VGN Verbindungen",
+        "description": "Bitte wählen Sie die Verbindung(en) aus",
+        "data": {
+          "connections": "Verbindungen"
+        }
+      }
+    }
+  }
+}
