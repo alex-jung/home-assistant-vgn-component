@@ -25,8 +25,31 @@ Until it's done you can install the integration by adding this repository as a c
 1. Restart Home Assistant
 
 ## Configuration
+### Start integration dialog
+The configuration of integration is made via Home Assistant GUI
+1. Open _Settings/Devices & services_
+2. Click on "Add Integration" button
+3. Search for "VGN Departures"
+4. Click on integration to start configuration dialog
 
-## Usage
+### Configure a new station
+Integration will load all available stations from GTFS data source. 
+Start enter your station name in field to reduce the list and then choose a station you are interesting in from the list:\
+![image](https://github.com/user-attachments/assets/e65635ec-2bc6-4eba-b73d-7b476bea1049)
+
+In the next step you can select directions splitted by transport types and trip names:
+![image](https://github.com/user-attachments/assets/96f402dd-a5c6-44d2-ad61-677adf38f7fe)
+
+As result new sensor(s) will be created:
+![image](https://github.com/user-attachments/assets/39ca6db8-8660-410d-9e2b-e4a92e055609)
+
+### Reconfigure an entry
+The directions you choosen in the [previous step](#Configure-a-new-station) can be reconfigured via GUI:
+![image](https://github.com/user-attachments/assets/03864ffd-2420-4ca0-97e8-03d64f0189ae)
+
+Here you can remove obsolete directions or add new by selection them in dialog.
+
+## Usage in dashboard
 
 ### Example 1
 
